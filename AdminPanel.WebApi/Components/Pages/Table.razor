@@ -1,0 +1,851 @@
+﻿@page "/schema/{Schema}/table/{TableName}"
+@using System.Globalization
+@inject DatabaseSchemaService SchemaService
+@inject TableDataService DataService
+@inject IJSRuntime JSRuntime
+@rendermode InteractiveServer
+
+
+<h1>@_descriptionScheme.@_descriptionTable</h1>
+
+<button class="btn btn-primary mb-3" @onclick="ShowAddModal">Добавить</button>
+
+@if (_data == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                @foreach (var col in _columns)
+                {
+                    <th>@col.DisplayName</th>
+                }
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _data)
+            {
+                var currentRow = row;
+                <tr @key="row[_primaryKeys.FirstOrDefault()]">
+                    @foreach (var col in _columns)
+                    {
+                        @* <td>@row[col.ColumnName]</td> *@
+                        <td>@FormatValueForDisplay(row[col.ColumnName], col.DataType)</td>
+                    }
+                    <td>
+                        <button class="btn btn-sm btn-warning" @onclick="() => EditRow(row)">Редактировать</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteRow(currentRow)">
+                            Удалить 
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+   <nav aria-label="Пример навигации по страницам">
+   <ul class="pagination">
+        <li class="page-item @(_currentPage == 1 ? "disabled" : "")">
+            <a class="page-link" 
+               style="cursor: pointer;" 
+               aria-label="Предыдущая" 
+               @onclick="PrevPage"
+               >
+                <span aria-hidden="true">&laquo;</span>
+            </a>
+        </li>
+        <li class="page-item">
+            <a class="page-link">
+                <span>Стр. @_currentPage</span>
+            </a>
+        </li>
+        <li class="page-item @(_currentPage == _lastPage ? "disabled" : "")">
+            <a class="page-link" 
+               style="cursor: pointer;" 
+               aria-label="Следующая" 
+               @onclick="NextPage"
+               >
+                <span aria-hidden="true">&raquo;</span>
+            </a>
+        </li>
+    </ul>
+</nav>
+}
+
+@if (_showModal)
+{
+    <div class="modal" style="display:block; background-color:rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(_isEdit ? "Редактирование записи" : "Добавление записи")</h5>
+                    <button type="button" class="close ms-auto bg-transparent" style="border: none;" @onclick="CloseModal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    @foreach (var col in _columns)
+                    {
+                        if (col.IsAutoIncrement) continue;
+
+                        var isRequired = !col.IsNullable;
+                        var hasError = _validationErrors.ContainsKey(col.ColumnName);
+                        var inputType = GetInputType(col.DataType);
+                        var inputStep = GetInputStep(col.DataType);
+
+                        <div class="form-group">
+                            <label>
+                                @col.DisplayName (@col.DataType)
+                                @if (isRequired)
+                                {
+                                    <span class="text-danger" title="Обязательное поле">*</span>
+                                }
+                            </label>
+
+                            @if (inputType == "textarea")
+                            {
+                                <textarea class="form-control @(hasError ? "is-invalid" : "")"
+                                          value="@GetEditValue(col.ColumnName)"
+                                          @onchange="@((ChangeEventArgs e) => SetEditValue(col.ColumnName, e.Value?.ToString()))"
+                                          rows="3">
+                        </textarea>
+                            }
+                            else if (inputType == "checkbox")
+                            {
+                                <div class="form-check">
+                                    <input type="checkbox"
+                                           class="form-check-input @(hasError ? "is-invalid" : "")"
+                                           checked="@(GetEditValue(col.ColumnName) == "True" || GetEditValue(col.ColumnName) == "true" || GetEditValue(col.ColumnName) == "1")"
+                                           @onchange="@((ChangeEventArgs e) => SetEditValue(col.ColumnName, e.Value?.ToString()))" />
+                                    <label class="form-check-label">Да/Нет</label>
+                                </div>
+                            }
+                            else if (inputType == "select")
+                            {
+                                <select class="form-control @(hasError ? "is-invalid" : "")"
+                                        value="@GetEditValue(col.ColumnName)"
+                                        @onchange="@((ChangeEventArgs e) => SetEditValue(col.ColumnName, e.Value?.ToString()))">
+                                    <option value="">-- Выберите --</option>
+                                    @if (col.DataType.Contains("bool"))
+                                    {
+                                        <option value="true">Да</option>
+                                        <option value="false">Нет</option>
+                                    }
+                                </select>
+                            }
+                            else
+                            {
+                                <input type="@inputType"
+                                       class="form-control @(hasError ? "is-invalid" : "")"
+                                       value="@GetEditValue(col.ColumnName)"
+                                       step="@inputStep"
+                                       @onchange="@((ChangeEventArgs e) => SetEditValue(col.ColumnName, e.Value?.ToString()))" />
+                            }
+
+                            @if (hasError)
+                            {
+                                <div class="invalid-feedback">@_validationErrors[col.ColumnName]</div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SaveRecord">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Schema { get; set; }
+    [Parameter] public string TableName { get; set; }
+
+    private string _descriptionScheme;
+    private string _descriptionTable;
+
+    private List<ColumnInfo> _columns;
+    private List<string> _primaryKeys;
+    private List<Dictionary<string, object>> _data;
+    private int _currentPage = 1;
+    private const int PageSize = 20;
+    private int _lastPage = 2;
+
+    private bool _showModal;
+    private bool _isEdit;
+    private Dictionary<string, object> _editValues = new();
+    private Dictionary<string, object> _originalKeyValues; 
+
+    private Dictionary<string, string> _validationErrors = new();
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadMetadataAsync();
+        await LoadDataAsync();
+    }
+
+    private async Task LoadMetadataAsync()
+    {
+        _descriptionScheme = await SchemaService.GetSchemaDescriptionAsync(Schema) ?? Schema;
+        _descriptionTable = await SchemaService.GetTableDescriptionAsync(Schema, TableName) ?? TableName;
+        _columns = await SchemaService.GetColumnsAsync(Schema, TableName);
+        _primaryKeys = await SchemaService.GetPrimaryKeyColumnsAsync(Schema, TableName);
+    }
+
+    private async Task LoadDataAsync()
+    {
+        var orderByColumn = _primaryKeys.FirstOrDefault() ?? "id";
+        _data = await DataService.GetDataAsync(Schema, TableName, orderByColumn, _currentPage, PageSize);
+    }
+
+    private async Task NextPage()
+    {
+        _currentPage++;
+        await LoadDataAsync();
+    }
+
+    private async Task PrevPage()
+    {
+        if (_currentPage > 1)
+        {
+            _currentPage--;
+            await LoadDataAsync();
+        }
+    }
+
+    private void ShowAddModal()
+    {
+        _isEdit = false;
+        _editValues = new Dictionary<string, object>();
+        foreach (var col in _columns.Where(c => !c.IsAutoIncrement))
+        {
+            _editValues[col.ColumnName] = null;
+        }
+        _showModal = true;
+    }
+
+    private void EditRow(Dictionary<string, object> row)
+    {
+        _isEdit = true;
+
+        Console.WriteLine("=== Редактирование строки (исходные данные) ===");
+        foreach (var kvp in row)
+        {
+            var col = _columns.FirstOrDefault(c => c.ColumnName == kvp.Key);
+            var type = col?.DataType ?? "unknown";
+            Console.WriteLine($"{kvp.Key}: {kvp.Value} (тип БД: {type}, тип .NET: {kvp.Value?.GetType()})");
+        }
+
+        _editValues = new Dictionary<string, object>();
+
+        foreach (var kvp in row)
+        {
+            var col = _columns.FirstOrDefault(c => c.ColumnName == kvp.Key);
+            if (col != null)
+            {
+                var formattedValue = FormatValueForInput(kvp.Value, col.DataType);
+                _editValues[kvp.Key] = formattedValue;
+
+                Console.WriteLine($"{kvp.Key} -> {formattedValue} (форматировано для input)");
+            }
+            else
+            {
+                _editValues[kvp.Key] = kvp.Value?.ToString() ?? "";
+            }
+        }
+
+        _originalKeyValues = new Dictionary<string, object>();
+        foreach (var pk in _primaryKeys)
+        {
+            _originalKeyValues[pk] = row[pk];
+        }
+
+        _showModal = true;
+    }
+
+    private string FormatValueForDisplay(object value, string dataType)
+    {
+        if (value == null || value == DBNull.Value)
+            return "";
+
+        return dataType.ToLowerInvariant() switch
+        {
+            "date" when value is DateTime dt => dt.ToString("dd.MM.yyyy"),
+            "timestamp" when value is DateTime ts => ts.ToString("dd.MM.yyyy HH:mm:ss"),
+            "numeric" or "decimal" when value is decimal d => d.ToString(CultureInfo.CurrentCulture),
+            _ => value.ToString()
+        };
+    }
+
+
+    private object FormatValueForInput(object value, string dataType)
+    {
+        if (value == null || value == DBNull.Value)
+            return "";
+
+        switch (dataType.ToLowerInvariant())
+        {
+            case "date":
+                // Для input type="date" нужен формат YYYY-MM-DD
+                if (value is DateTime dateTime)
+                    return dateTime.ToString("yyyy-MM-dd");
+                if (value is DateOnly dateOnly)
+                    return dateOnly.ToString("yyyy-MM-dd");
+                break;
+
+            case "timestamp":
+            case "timestamp without time zone":
+            case "timestamptz":
+            case "timestamp with time zone":
+                // Для input type="datetime-local" нужен формат YYYY-MM-DDTHH:mm:ss
+                if (value is DateTime timestamp)
+                    return timestamp.ToString("yyyy-MM-ddTHH:mm:ss");
+                break;
+
+            case "time":
+            case "time without time zone":
+                // Для input type="time" нужен формат HH:mm:ss
+                if (value is TimeSpan timeSpan)
+                    return timeSpan.ToString(@"hh\:mm\:ss");
+                if (value is DateTime time)
+                    return time.ToString("HH:mm:ss");
+                if (value is TimeOnly timeOnly)
+                    return timeOnly.ToString("HH:mm:ss");
+                break;
+
+            case "numeric":
+            case "decimal":
+            case "real":
+            case "float4":
+            case "double precision":
+            case "float8":
+                // Для чисел используем инвариантную культуру (с точкой)
+                if (value is decimal decimalValue)
+                    return decimalValue.ToString(CultureInfo.InvariantCulture);
+                if (value is float floatValue)
+                    return floatValue.ToString(CultureInfo.InvariantCulture);
+                if (value is double doubleValue)
+                    return doubleValue.ToString(CultureInfo.InvariantCulture);
+                break;
+        }
+
+        return value.ToString();
+    }
+
+
+
+    private async Task DeleteRow(Dictionary<string, object> row)
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Удалить запись?");
+        if (!confirmed) return;
+
+        var keyValues = new Dictionary<string, object>();
+        foreach (var pk in _primaryKeys)
+        {
+            keyValues[pk] = row[pk];
+        }
+        await DataService.DeleteAsync(Schema, TableName, keyValues);
+        await LoadDataAsync();
+    }
+
+    private async Task SaveRecord()
+    {
+        _validationErrors.Clear();
+        bool hasErrors = false;
+
+        foreach (var col in _columns.Where(c => !c.IsAutoIncrement))
+        {
+            var value = GetEditValue(col.ColumnName);
+            var error = ValidateField(col, value);
+
+            if (!string.IsNullOrEmpty(error))
+            {
+                _validationErrors[col.ColumnName] = error;
+                hasErrors = true;
+            }
+        }
+
+        if (hasErrors)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Пожалуйста, исправьте ошибки в форме");
+            return;
+        }
+
+        // Преобразование и сохранение
+        try
+        {
+            var convertedValues = new Dictionary<string, object>();
+            foreach (var col in _columns.Where(c => !c.IsAutoIncrement))
+            {
+                var value = GetEditValue(col.ColumnName);
+                convertedValues[col.ColumnName] = ConvertValue(value, col);
+            }
+
+            if (_isEdit)
+            {
+                await DataService.UpdateAsync(Schema, TableName, convertedValues, _primaryKeys, _originalKeyValues);
+            }
+            else
+            {
+                await DataService.InsertAsync(Schema, TableName, convertedValues);
+            }
+
+            _showModal = false;
+            await LoadDataAsync();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Ошибка сохранения: {ex.Message}");
+        }
+    }
+
+
+    private void CloseModal() => _showModal = false;
+
+    private string GetEditValue(string columnName)
+    {
+        if (_editValues != null && _editValues.TryGetValue(columnName, out var value) && value != null)
+        {
+            return value.ToString();
+        }
+        return string.Empty;
+    }
+
+    private void SetEditValue(string columnName, string value)
+    {
+        if (_editValues == null)
+            _editValues = new Dictionary<string, object>();
+
+        _editValues[columnName] = value;
+    }
+
+    // private object ConvertToDbType(string value, ColumnInfo column)
+    // {
+    //     if (string.IsNullOrWhiteSpace(value))
+    //         return null;
+
+    //     string typeName = column.DataType.ToLowerInvariant();
+
+    //     try
+    //     {
+    //         return typeName switch
+    //         {
+    //             "integer" or "int" or "int4" => int.Parse(value),
+    //             "bigint" or "int8" => long.Parse(value),
+    //             "smallint" or "int2" => short.Parse(value),
+    //             "boolean" or "bool" => bool.Parse(value),
+    //             "numeric" or "decimal" => decimal.Parse(value),
+    //             "real" or "float4" => float.Parse(value),
+    //             "double precision" or "float8" => double.Parse(value),
+    //             "date" => DateOnly.Parse(value),
+    //             "timestamp" or "timestamp without time zone" => DateTime.Parse(value),
+    //             "timestamptz" or "timestamp with time zone" => DateTime.Parse(value),
+    //             "time" => TimeOnly.Parse(value),
+    //             "uuid" => Guid.Parse(value),
+    //             "json" or "jsonb" => value, 
+    //             _ => value
+    //         };
+    //     }
+    //     catch (FormatException ex)
+    //     {
+    //         throw new InvalidOperationException($"Неверный формат для колонки {column.ColumnName} (тип {column.DataType})", ex);
+    //     }
+    // }
+
+    // Определение типа input по типу данных PostgreSQL
+    private string GetInputType(string dataType)
+    {
+        return dataType.ToLowerInvariant() switch
+        {
+            // Числовые типы
+            "integer" or "int" or "int4" or "smallint" or "int2" or "bigint" or "int8" => "number",
+            "numeric" or "decimal" or "real" or "float4" or "double precision" or "float8" => "number",
+            
+            // Типы дат и времени
+            "date" => "date",
+            "time" or "time without time zone" or "timetz" => "time",
+            "timestamp" or "timestamp without time zone" or "timestamptz" or "timestamp with time zone" => "datetime-local",
+            
+            // Логический тип
+            "boolean" or "bool" => "checkbox",
+            
+            // JSON типы - оставляем текстовое поле
+            "json" or "jsonb" => "textarea",
+            
+            // Текстовые типы
+            "text" or "character varying" or "varchar" or "char" or "character" => "text",
+            
+            // UUID
+            "uuid" => "text",
+
+            // По умолчанию
+            _ => "text"
+        };
+    }
+
+    // Шаг для числовых полей
+    private string GetInputStep(string dataType)
+    {
+        return dataType.ToLowerInvariant() switch
+        {
+            "integer" or "int" or "int4" or "smallint" or "int2" or "bigint" or "int8" => "1",
+            "numeric" or "decimal" or "real" or "float4" or "double precision" or "float8" => "0.01",
+            _ => null
+        };
+    }
+
+    private string ValidateField(ColumnInfo col, string value)
+    {
+        // Проверка обязательности
+        if (!col.IsNullable && string.IsNullOrWhiteSpace(value))
+            return "Поле обязательно для заполнения";
+
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        try
+        {
+            switch (col.DataType.ToLowerInvariant())
+            {
+                case "integer":
+                case "int":
+                case "int4":
+                case "smallint":
+                case "int2":
+                    ParseInt(value); // Просто проверяем, что парсится
+                    break;
+
+                case "bigint":
+                case "int8":
+                    ParseLong(value);
+                    break;
+
+                case "numeric":
+                case "decimal":
+                    ParseDecimal(value);
+                    break;
+
+                case "real":
+                case "float4":
+                    ParseFloat(value);
+                    break;
+
+                case "double precision":
+                case "float8":
+                    ParseDouble(value);
+                    break;
+
+                case "boolean":
+                case "bool":
+                    ParseBoolean(value);
+                    break;
+
+                case "date":
+                    DateOnly.Parse(value, CultureInfo.InvariantCulture);
+                    break;
+
+                case "time":
+                case "time without time zone":
+                    TimeOnly.Parse(value, CultureInfo.InvariantCulture);
+                    break;
+
+                case "timestamp":
+                case "timestamp without time zone":
+                case "timestamptz":
+                case "timestamp with time zone":
+                    DateTime.Parse(value, CultureInfo.InvariantCulture);
+                    break;
+
+                case "uuid":
+                    Guid.Parse(value);
+                    break;
+            }
+        }
+        catch (FormatException)
+        {
+            return $"Неверный формат для типа {col.DataType}";
+        }
+
+        return null;
+    }
+
+
+    private object ConvertValue(string value, ColumnInfo col)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        try
+        {
+            return col.DataType.ToLowerInvariant() switch
+            {
+                "integer" or "int" or "int4" => ParseInt(value),
+                "smallint" or "int2" => (short)ParseInt(value),
+                "bigint" or "int8" => ParseLong(value),
+            
+                "numeric" or "decimal" => ParseDecimal(value),
+                "real" or "float4" => ParseFloat(value),
+                "double precision" or "float8" => ParseDouble(value),
+            
+                "boolean" or "bool" => ParseBoolean(value),
+            
+                "date" => ParseDate(value),
+                "time" or "time without time zone" => ParseTime(value),
+                "timestamp" or "timestamp without time zone" => ParseDateTime(value),
+                "timestamptz" or "timestamp with time zone" => ParseDateTime(value),
+            
+                "uuid" => Guid.Parse(value),
+                _ => value
+            };
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException($"Ошибка преобразования поля {col.ColumnName}: {ex.Message}", ex);
+        }
+    }
+
+    private bool ParseBoolean(string value)
+    {
+        return value.ToLowerInvariant() switch
+        {
+            "true" or "1" or "yes" or "да" or "t" => true,
+            "false" or "0" or "no" or "нет" or "f" => false,
+            _ => bool.Parse(value)
+        };
+    }
+
+    private T ParseNumber<T>(string value, string dataType) where T : struct
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentNullException(nameof(value));
+
+        // Убираем пробелы и заменяем запятую на точку для единообразия
+        value = value.Trim().Replace(',', '.');
+
+        try
+        {
+            // Для целых чисел
+            if (typeof(T) == typeof(int) || typeof(T) == typeof(long) ||
+                typeof(T) == typeof(short) || typeof(T) == typeof(byte))
+            {
+                // Сначала пробуем парсить как есть
+                if (typeof(T) == typeof(int) && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intResult))
+                    return (T)(object)intResult;
+                if (typeof(T) == typeof(long) && long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longResult))
+                    return (T)(object)longResult;
+                if (typeof(T) == typeof(short) && short.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var shortResult))
+                    return (T)(object)shortResult;
+
+                // Если не получилось, возможно есть десятичная часть - пробуем отбросить
+                if (value.Contains('.'))
+                {
+                    var intPart = value.Split('.')[0];
+                    if (typeof(T) == typeof(int) && int.TryParse(intPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intResult2))
+                        return (T)(object)intResult2;
+                }
+            }
+            // Для чисел с плавающей точкой
+            else if (typeof(T) == typeof(decimal) || typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            {
+                if (typeof(T) == typeof(decimal) && decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var decResult))
+                    return (T)(object)decResult;
+                if (typeof(T) == typeof(float) && float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var floatResult))
+                    return (T)(object)floatResult;
+                if (typeof(T) == typeof(double) && double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var doubleResult))
+                    return (T)(object)doubleResult;
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new FormatException($"Не удалось преобразовать '{value}' в {typeof(T).Name}", ex);
+        }
+
+        throw new FormatException($"Не удалось преобразовать '{value}' в {typeof(T).Name}");
+    }
+
+    // Специализированные методы для каждого типа
+    private int ParseInt(string value)
+    {
+        value = value.Trim().Replace(',', '.');
+
+        // Пробуем прямой парсинг
+        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+            return result;
+
+        // Если есть десятичная часть, пробуем отбросить
+        if (value.Contains('.'))
+        {
+            var intPart = value.Split('.')[0];
+            if (int.TryParse(intPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
+                return result;
+        }
+
+        throw new FormatException($"Не удалось преобразовать '{value}' в целое число");
+    }
+
+    private long ParseLong(string value)
+    {
+        value = value.Trim().Replace(',', '.');
+
+        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
+            return result;
+
+        if (value.Contains('.'))
+        {
+            var intPart = value.Split('.')[0];
+            if (long.TryParse(intPart, NumberStyles.Integer, CultureInfo.InvariantCulture, out result))
+                return result;
+        }
+
+        throw new FormatException($"Не удалось преобразовать '{value}' в целое число");
+    }
+
+    private decimal ParseDecimal(string value)
+    {
+        value = value.Trim().Replace(',', '.');
+
+        // Пробуем прямой парсинг
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+            return result;
+
+        // Пробуем заменить точку на запятую и наоборот
+        if (value.Contains('.'))
+        {
+            if (decimal.TryParse(value.Replace('.', ','), NumberStyles.Any, CultureInfo.CurrentCulture, out result))
+                return result;
+        }
+        else if (value.Contains(','))
+        {
+            if (decimal.TryParse(value.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out result))
+                return result;
+        }
+
+        throw new FormatException($"Не удалось преобразовать '{value}' в десятичное число");
+    }
+
+    private float ParseFloat(string value)
+    {
+        value = value.Trim().Replace(',', '.');
+
+        if (float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+            return result;
+
+        throw new FormatException($"Не удалось преобразовать '{value}' в число с плавающей точкой");
+    }
+
+    private double ParseDouble(string value)
+    {
+        value = value.Trim().Replace(',', '.');
+
+        if (double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
+            return result;
+
+        throw new FormatException($"Не удалось преобразовать '{value}' в число с плавающей точкой");
+    }
+
+    private DateTime ParseDate(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new FormatException("Дата не может быть пустой");
+
+        value = value.Trim();
+
+        try
+        {
+            // Пробуем распарсить как DateOnly с инвариантной культурой (ожидает YYYY-MM-DD)
+            if (DateOnly.TryParse(value, out var dateResult))
+                return dateResult.ToDateTime(TimeOnly.MinValue);
+
+            // Пробуем распарсить как DateTime и взять дату
+            if (DateTime.TryParse(value, CultureInfo.CurrentCulture, out var dateTimeResult))
+                return dateTimeResult.Date;
+
+            // Пробуем различные форматы вручную
+            var formats = new[]
+            {
+            "yyyy-MM-dd",
+            "dd.MM.yyyy",
+            "dd/MM/yyyy",
+            "MM/dd/yyyy",
+            "yyyyMMdd",
+            "dd-MM-yyyy",
+            "dd MMM yyyy",
+            "d MMM yyyy"
+            };
+
+            if (DateOnly.TryParseExact(value, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out dateResult))
+                return dateResult.ToDateTime(TimeOnly.MinValue);
+
+            // Последняя попытка - заменить разделители
+            var normalized = value.Replace('/', '-').Replace('.', '-');
+            if (DateOnly.TryParseExact(normalized, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dateResult))
+                return dateResult.ToDateTime(TimeOnly.MinValue);
+
+            throw new FormatException($"Не удалось распознать дату '{value}'. Ожидаемые форматы: ГГГГ-ММ-ДД, ДД.ММ.ГГГГ, ДД/ММ/ГГГГ");
+        }
+        catch (Exception ex)
+        {
+            throw new FormatException($"Ошибка парсинга даты '{value}': {ex.Message}", ex);
+        }
+    }
+
+    private TimeSpan ParseTime(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new FormatException("Время не может быть пустым");
+
+        value = value.Trim();
+
+        // Пробуем распарсить как TimeOnly
+        if (TimeOnly.TryParse(value, out var timeOnly))
+        {
+            return timeOnly.ToTimeSpan();
+        }
+
+        // Пробуем распарсить как TimeSpan
+        if (TimeSpan.TryParse(value, out var timeSpan))
+        {
+            return timeSpan;
+        }
+
+        throw new FormatException($"Не удалось распознать время '{value}'");
+    }
+
+    private DateTime ParseDateTime(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new FormatException("Дата и время не могут быть пустыми");
+
+        value = value.Trim();
+
+        // Пробуем распарсить как DateTime
+        if (DateTime.TryParse(value, out var dateTime))
+        {
+            return dateTime;
+        }
+
+        // Пробуем разные форматы
+        var formats = new[]
+        {
+        "yyyy-MM-dd HH:mm:ss",
+        "dd.MM.yyyy HH:mm:ss",
+        "yyyy-MM-ddTHH:mm:ss",
+        "dd.MM.yyyy",
+        "yyyy-MM-dd"
+    };
+
+        if (DateTime.TryParseExact(value, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out dateTime))
+        {
+            return dateTime;
+        }
+
+        throw new FormatException($"Не удалось распознать дату/время '{value}'");
+    }
+
+}

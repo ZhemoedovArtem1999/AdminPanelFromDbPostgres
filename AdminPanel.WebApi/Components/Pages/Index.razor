@@ -1,0 +1,34 @@
+﻿@page "/"
+@inject DatabaseSchemaService SchemaService
+
+<h1>Администрирование</h1>
+<h2>Боты:</h2>
+
+@if (_schemas == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <ul>
+        @foreach (var schema in _schemas)
+        {
+            <li>
+                <a href="/schema/@schema.SchemaName">
+                    @(string.IsNullOrWhiteSpace( schema.Description) 
+                    ?  schema.SchemaName 
+                    : $"{schema.Description} ({schema.SchemaName})")
+                </a>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    private List<SchemaInfo> _schemas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _schemas = await SchemaService.GetSchemasAsync();
+    }
+}

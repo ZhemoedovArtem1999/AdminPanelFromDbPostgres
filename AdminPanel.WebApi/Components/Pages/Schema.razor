@@ -1,0 +1,36 @@
+﻿@page "/schema/{SchemaName}"
+@inject DatabaseSchemaService SchemaService
+
+<h1>Бот: @_schemaDescription</h1>
+
+@if (_tables == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <ul>
+        @foreach (var table in _tables)
+        {
+            <li>
+                <a href="/schema/@SchemaName/table/@table.TableName">
+                    @(string.IsNullOrWhiteSpace(table.Description) 
+                    ? table.TableName 
+                    : $"{table.Description} ({table.TableName})")
+                </a>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter] public string SchemaName { get; set; }
+    private List<TableInfo> _tables;
+    private string _schemaDescription;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _schemaDescription = await SchemaService.GetSchemaDescriptionAsync(SchemaName) ?? SchemaName;
+        _tables = await SchemaService.GetTablesAsync(SchemaName);
+    }
+}
