@@ -5,14 +5,128 @@
 @inject IJSRuntime JSRuntime
 @rendermode InteractiveServer
 
-
 <h1>@_descriptionScheme.@_descriptionTable</h1>
 
-<button class="btn btn-primary mb-3" @onclick="ShowAddModal">Добавить</button>
-
-@if (_data == null)
+<!-- Панель поиска (отображается только если данные загружены) -->
+@if (_columns != null)
 {
-    <p>Loading...</p>
+    <!-- Панель поиска -->
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5>🔍 Поиск</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <!-- Выбор поля -->
+                <div class="col-md-3">
+                    <label>Поле</label>
+                    <select value="@_newCondition.FieldName" @onchange="OnFieldChanged" class="form-control">
+                        <option value="">-- Выберите поле --</option>
+                        @foreach (var col in _columns.Where(c => !c.IsAutoIncrement))
+                        {
+                            <option value="@col.ColumnName">@col.DisplayName (@col.DataType)</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Выбор оператора (доступен только если выбрано поле) -->
+                <div class="col-md-3">
+                    <label>Оператор</label>
+                    <select @bind="_newCondition.Operator"
+                            disabled="@(string.IsNullOrEmpty(_newCondition.FieldName))"
+                            class="form-control">
+                        @if (string.IsNullOrWhiteSpace(_newCondition.FieldName))
+                        {
+                            
+                        }
+                        else if (IsBooleanColumn(_newCondition.FieldName))
+                        {
+                            <option value="equals">@OperatorNames["equals"]</option>
+                        }
+                        else if (IsTextColumn(_newCondition.FieldName))
+                        {
+                            <option value="contains">@OperatorNames["contains"]</option>
+                            <option value="equals">@OperatorNames["equals"]</option>
+                            <option value="startswith">@OperatorNames["startswith"]</option>
+                        }
+                        else if (IsNumericColumn(_newCondition.FieldName) || IsDateColumn(_newCondition.FieldName))
+                        {
+                            <option value="equals">@OperatorNames["equals"]</option>
+                            <option value="gt">@OperatorNames["gt"]</option>
+                            <option value="lt">@OperatorNames["lt"]</option>
+                        }
+                        else
+                        {
+                            <option value="equals">@OperatorNames["equals"]</option>
+                            <option value="contains">@OperatorNames["contains"]</option>
+                        }
+                    </select>
+                </div>
+
+                <!-- Ввод значения (доступен только если выбрано поле) -->
+                <div class="col-md-3">
+                    <label>Значение</label>
+                    @if (IsBooleanColumn(_newCondition.FieldName))
+                    {
+                        <select @bind="_newCondition.Value"
+                                disabled="@(string.IsNullOrEmpty(_newCondition.FieldName))"
+                                class="form-control">
+                            <option value="">-- Выберите --</option>
+                            <option value="true">Да</option>
+                            <option value="false">Нет</option>
+                        </select>
+                    }
+                    else
+                    {
+                        <input type="text"
+                               @bind="_newCondition.Value"
+                               disabled="@(string.IsNullOrEmpty(_newCondition.FieldName))"
+                               class="form-control"
+                               placeholder="значение" />
+                    }
+                </div>
+
+                <!-- Кнопка добавления условия -->
+                <div class="col-md-3">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary form-control" @onclick="AddCondition">➕ Добавить</button>
+                </div>
+            </div>
+
+            <!-- Список активных фильтров (без изменений) -->
+            @if (_searchConditions.Any())
+            {
+                <div class="mt-3">
+                    <h6>Активные фильтры:</h6>
+                    <ul class="list-group">
+                        @foreach (var cond in _searchConditions)
+                        {
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                @cond.FieldName @cond.Operator '@cond.Value'
+                                <button class="btn btn-sm btn-danger" @onclick="() => RemoveCondition(cond)">✖</button>
+                            </li>
+                        }
+                    </ul>
+                    <button class="btn btn-secondary mt-2" @onclick="ClearConditions">Сбросить все</button>
+                </div>
+            }
+
+            <!-- Кнопка применения поиска -->
+            <button class="btn btn-success mt-3" @onclick="ApplySearch">🔎 Применить поиск</button>
+        </div>
+    </div>
+  
+}
+
+<!-- Кнопка добавления записи (доступна только когда колонки загружены) -->
+@if (_columns != null)
+{
+    <button class="btn btn-primary mb-3" @onclick="ShowAddModal">➕ Добавить запись</button>
+}
+
+@if (_columns == null || _data == null)
+{
+    <p>Загрузка...</p>
 }
 else
 {
@@ -63,8 +177,8 @@ else
                 <span>Стр. @_currentPage</span>
             </a>
         </li>
-        <li class="page-item @(_currentPage == _lastPage ? "disabled" : "")">
-            <a class="page-link" 
+            <li class="page-item @(_currentPage >= _totalPages ? "disabled" : "")">
+               <a class="page-link"
                style="cursor: pointer;" 
                aria-label="Следующая" 
                @onclick="NextPage"
@@ -166,6 +280,15 @@ else
     [Parameter] public string Schema { get; set; }
     [Parameter] public string TableName { get; set; }
 
+    private Dictionary<string, string> OperatorNames = new Dictionary<string, string>
+    {
+        {"contains", "Содержит"},      
+        {"equals", "Равно"},
+        {"startswith", "Начинается с"},
+        {"gt", "Больше"},
+        {"lt", "Меньше"},      
+    };
+
     private string _descriptionScheme;
     private string _descriptionTable;
 
@@ -174,7 +297,8 @@ else
     private List<Dictionary<string, object>> _data;
     private int _currentPage = 1;
     private const int PageSize = 20;
-    private int _lastPage = 2;
+    private int _totalCount;
+    private int _totalPages => (_totalCount + PageSize - 1) / PageSize;
 
     private bool _showModal;
     private bool _isEdit;
@@ -183,25 +307,45 @@ else
 
     private Dictionary<string, string> _validationErrors = new();
 
+    private List<SearchCondition> _searchConditions = new();
+    private SearchCondition _newCondition = new();
 
     protected override async Task OnParametersSetAsync()
     {
         await LoadMetadataAsync();
+        await LoadTotalCountAsync();
         await LoadDataAsync();
+        _newCondition = new SearchCondition(); // гарантируем чистоту
     }
 
     private async Task LoadMetadataAsync()
     {
         _descriptionScheme = await SchemaService.GetSchemaDescriptionAsync(Schema) ?? Schema;
         _descriptionTable = await SchemaService.GetTableDescriptionAsync(Schema, TableName) ?? TableName;
-        _columns = await SchemaService.GetColumnsAsync(Schema, TableName);
-        _primaryKeys = await SchemaService.GetPrimaryKeyColumnsAsync(Schema, TableName);
+        _columns = (await SchemaService.GetColumnsAsync(Schema, TableName)) ?? new List<ColumnInfo>();
+        _primaryKeys = (await SchemaService.GetPrimaryKeyColumnsAsync(Schema, TableName)) ?? new List<string>();
     }
 
     private async Task LoadDataAsync()
     {
         var orderByColumn = _primaryKeys.FirstOrDefault() ?? "id";
-        _data = await DataService.GetDataAsync(Schema, TableName, orderByColumn, _currentPage, PageSize);
+        _data = await DataService.GetDataAsync(
+            Schema,
+            TableName,
+            orderByColumn,
+            _searchConditions,
+            _columns,
+            _currentPage,
+            PageSize);
+    }
+
+    private async Task LoadTotalCountAsync()
+    {
+        _totalCount = await DataService.GetCountAsync(
+            Schema,
+            TableName,
+            _searchConditions,
+            _columns);
     }
 
     private async Task NextPage()
@@ -217,6 +361,100 @@ else
             _currentPage--;
             await LoadDataAsync();
         }
+    }
+
+    private void OnFieldChanged(ChangeEventArgs e)
+    {
+        _newCondition.FieldName = e.Value?.ToString();
+        // Устанавливаем оператор по умолчанию в зависимости от типа поля
+        _newCondition.Operator = GetDefaultOperatorForField(_newCondition.FieldName);
+        _newCondition.Value = null;
+        _newCondition.Operator = null;
+
+    }
+
+    private string GetDefaultOperatorForField(string fieldName)
+    {
+        if (string.IsNullOrEmpty(fieldName)) return "contains";
+        if (IsBooleanColumn(fieldName)) return "equals";
+        if (IsTextColumn(fieldName)) return "contains";
+        if (IsNumericColumn(fieldName) || IsDateColumn(fieldName)) return "equals";
+        return "contains";
+    }
+
+    private void AddCondition()
+    {
+        if (!string.IsNullOrWhiteSpace(_newCondition.FieldName) &&
+            !string.IsNullOrWhiteSpace(_newCondition.Value))
+        {
+            _searchConditions.Add(new SearchCondition
+            {
+                FieldName = _newCondition.FieldName,
+                Operator = string.IsNullOrEmpty(_newCondition.Operator)
+                    ? GetDefaultOperatorForField(_newCondition.FieldName)
+                    : _newCondition.Operator,
+                Value = _newCondition.Value
+            });
+            _newCondition = new SearchCondition(); // сброс
+        }
+    }
+
+    private void RemoveCondition(SearchCondition cond)
+    {
+        _searchConditions.Remove(cond);
+    }
+
+    private void ClearConditions()
+    {
+        _searchConditions.Clear();
+    }
+
+    private async Task ApplySearch()
+    {
+        _currentPage = 1;
+        await LoadTotalCountAsync();
+        await LoadDataAsync();
+    }
+
+    private bool IsTextColumn(string fieldName)
+    {
+        var col = _columns.FirstOrDefault(c => c.ColumnName == fieldName);
+        return col != null && IsTextType(col.DataType);
+    }
+
+    private bool IsNumericColumn(string fieldName)
+    {
+        var col = _columns.FirstOrDefault(c => c.ColumnName == fieldName);
+        return col != null && IsNumericType(col.DataType);
+    }
+
+    private bool IsDateColumn(string fieldName)
+    {
+        var col = _columns.FirstOrDefault(c => c.ColumnName == fieldName);
+        return col != null && IsDateType(col.DataType);
+    }
+
+    private bool IsBooleanColumn(string fieldName)
+    {
+        if (string.IsNullOrEmpty(fieldName)) return false;
+        var col = _columns?.FirstOrDefault(c => c.ColumnName == fieldName);
+        return col != null && IsBooleanType(col.DataType);
+    }
+
+    private bool IsTextType(string type) =>
+        new[] { "string", "text", "varchar", "char" }.Contains(type?.ToLower());
+
+    private bool IsNumericType(string type) =>
+        new[] { "int", "long", "decimal", "double", "float", "short", "byte", "numeric", "integer" }.Contains(type?.ToLower());
+
+    private bool IsDateType(string type) =>
+        new[] { "datetime", "date", "time", "timestamp", "timestamp with time zone" }.Contains(type?.ToLower());
+
+    private bool IsBooleanType(string type)
+    {
+        if (string.IsNullOrEmpty(type)) return false;
+        var lower = type.ToLower();
+        return lower.Contains("bool");
     }
 
     private void ShowAddModal()
@@ -274,7 +512,15 @@ else
         if (value == null || value == DBNull.Value)
             return "";
 
-        return dataType.ToLowerInvariant() switch
+        var lower = dataType.ToLowerInvariant();
+        if (lower.Contains("bool"))
+        {
+            // Преобразуем в bool, если ещё не
+            bool boolVal = value is bool b ? b : (value.ToString() == "True");
+            return boolVal ? "Да" : "Нет";
+        }
+
+        return lower switch
         {
             "date" when value is DateTime dt => dt.ToString("dd.MM.yyyy"),
             "timestamp" when value is DateTime ts => ts.ToString("dd.MM.yyyy HH:mm:ss"),
@@ -282,7 +528,6 @@ else
             _ => value.ToString()
         };
     }
-
 
     private object FormatValueForInput(object value, string dataType)
     {
