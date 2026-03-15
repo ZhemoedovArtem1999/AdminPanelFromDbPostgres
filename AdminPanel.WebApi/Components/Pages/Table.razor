@@ -1,4 +1,4 @@
-﻿@page "/schema/{Schema}/table/{TableName}"
+﻿@page "/{Schema}/table/{TableName}"
 @using System.Globalization
 @inject DatabaseSchemaService SchemaService
 @inject TableDataService DataService
@@ -22,7 +22,7 @@
                     <label>Поле</label>
                     <select value="@_newCondition.FieldName" @onchange="OnFieldChanged" class="form-control">
                         <option value="">-- Выберите поле --</option>
-                        @foreach (var col in _columns.Where(c => !c.IsAutoIncrement))
+                        @foreach (var col in _columns)
                         {
                             <option value="@col.ColumnName">@col.DisplayName (@col.DataType)</option>
                         }

@@ -1,22 +1,37 @@
-﻿@* <div class="top-row ps-3 navbar navbar-dark">
+﻿@inject DatabaseSchemaService SchemaService
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">Your App</a>
+        <a class="navbar-brand" href="">Админка</a>
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<input type="checkbox" title="Меню" class="navbar-toggler" />
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="home" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
+    <nav class="nav flex-column">
+
+        @if (_schemas != null)
+        {
+            foreach (var schema in _schemas)
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="@($"/{schema.SchemaName}")">
+                        <i class="bi bi-robot" aria-hidden="true"></i>
+                        @schema.DisplayName
+                    </NavLink>
+                </div>
+            }
+        }
     </nav>
-</div> *@
+</div>
+
+@code {
+    private List<SchemaInfo> _schemas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _schemas = await SchemaService.GetSchemasAsync();
+    }
+}
+
