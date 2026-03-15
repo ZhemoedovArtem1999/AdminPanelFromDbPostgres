@@ -14,7 +14,7 @@ else
         @foreach (var table in _tables)
         {
             <li>
-                <a href="/@SchemaName/table/@table.TableName">
+                <a href="/@SchemaName/@table.TableName">
                     @(string.IsNullOrWhiteSpace(table.Description) 
                     ? table.TableName 
                     : $"{table.Description} ({table.TableName})")

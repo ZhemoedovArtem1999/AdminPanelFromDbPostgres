@@ -1,4 +1,4 @@
-﻿@page "/{Schema}/table/{TableName}"
+﻿@page "/{Schema}/{TableName}"
 @using System.Globalization
 @inject DatabaseSchemaService SchemaService
 @inject TableDataService DataService
@@ -102,7 +102,7 @@
                         @foreach (var cond in _searchConditions)
                         {
                             <li class="list-group-item d-flex justify-content-between align-items-center">
-                                @cond.FieldName @cond.Operator '@cond.Value'
+                                @_columns.First(x => x.ColumnName == cond.FieldName).DisplayName @OperatorNames[cond.Operator].ToLowerInvariant() '@cond.Value'
                                 <button class="btn btn-sm btn-danger" @onclick="() => RemoveCondition(cond)">✖</button>
                             </li>
                         }
@@ -395,7 +395,7 @@ else
                     : _newCondition.Operator,
                 Value = _newCondition.Value
             });
-            _newCondition = new SearchCondition(); // сброс
+            _newCondition = new SearchCondition();
         }
     }
 
