@@ -1,6 +1,6 @@
 ﻿@page "/{SchemaName}"
 
-@inject DatabaseSchemaService SchemaService
+@inject IAdminPanelApi Api
 
 <h1>Бот: @_schemaDescription</h1>
 
@@ -31,7 +31,7 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        _schemaDescription = await SchemaService.GetSchemaDescriptionAsync(SchemaName) ?? SchemaName;
-        _tables = await SchemaService.GetTablesAsync(SchemaName);
+        _schemaDescription = await Api.GetSchemaDescriptionAsync(SchemaName) ?? SchemaName;
+        _tables = await Api.GetTablesAsync(SchemaName);
     }
 }

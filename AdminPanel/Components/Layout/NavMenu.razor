@@ -1,4 +1,4 @@
-﻿@inject DatabaseSchemaService SchemaService
+﻿@inject IAdminPanelApi Api
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -31,7 +31,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _schemas = await SchemaService.GetSchemasAsync();
+        _schemas = await Api.GetSchemasAsync();
     }
 }
 

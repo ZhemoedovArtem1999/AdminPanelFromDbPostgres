@@ -1,6 +1,3 @@
-
-using AdminPanel.WebApi.Components;
-using AdminPanel.WebApi.Services;
 using Npgsql;
 
 namespace AdminPanel.WebApi;
@@ -14,13 +11,8 @@ public class Program
         NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
         AppContext.SetSwitch("Npgsql.EnableSqlLogging", true);
 
-        // Add services to the container.
-
         builder.Services.AddControllers();
-        // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
         builder.Services.AddOpenApi();
-
-        #region подключение Blazor
 
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
@@ -28,20 +20,18 @@ public class Program
 
         builder.Services.AddHttpClient();
 
-        builder.Services.AddScoped<DatabaseSchemaService>();
-        builder.Services.AddScoped<TableDataService>();
-        #endregion
+        builder.Services.AddControllers();
+
+        builder.Services.ConfigureAdminPanelServices(builder.Configuration);
 
         var app = builder.Build();
 
-        // Configure the HTTP request pipeline.
         if (app.Environment.IsDevelopment())
         {
             app.MapOpenApi();
         }
 
         app.UseHttpsRedirection();
-        // для Blazor
         app.UseStaticFiles();
 
         app.UseRouting();
@@ -52,8 +42,7 @@ public class Program
 
         app.MapControllers();
 
-        // для Blazor
-        app.MapRazorComponents<App>()
+        app.MapRazorComponents<AdminPanel.Components.App>()
             .AddInteractiveServerRenderMode();
 
         app.Run();

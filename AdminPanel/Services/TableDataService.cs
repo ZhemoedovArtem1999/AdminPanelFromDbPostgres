@@ -1,12 +1,13 @@
-﻿using AdminPanel.WebApi.Models;
+﻿using AdminPanel.Models;
 using Dapper;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Globalization;
 using System.Text;
 
-namespace AdminPanel.WebApi.Services;
+namespace AdminPanel.Services;
 
-public class TableDataService
+public class TableDataService : ITableDataService
 {
     private readonly string _connectionString;
 
@@ -50,7 +51,7 @@ public class TableDataService
         string table,
         string orderByColumn,
         List<SearchCondition> filters,
-        List<ColumnInfo> columns,        // метаданные колонок для валидации
+        List<ColumnInfo> columns,
         int page = 1,
         int pageSize = 50)
     {
@@ -63,7 +64,6 @@ public class TableDataService
             for (int i = 0; i < filters.Count; i++)
             {
                 var filter = filters[i];
-                // Проверяем, что поле существует в метаданных
                 var column = columns.FirstOrDefault(c =>
                     c.ColumnName.Equals(filter.FieldName, StringComparison.OrdinalIgnoreCase));
                 if (column == null) continue;
@@ -134,8 +134,6 @@ public class TableDataService
         return await connection.ExecuteScalarAsync<int>(sql.ToString(), parameters);
     }
 
-    // ---- Вспомогательные методы для построения условий ----
-
     private string BuildWhereClause(ColumnInfo column, string op, string rawValue, string paramName, out object paramValue)
     {
         paramValue = null;
@@ -143,13 +141,11 @@ public class TableDataService
 
         var colType = column.DataType;
 
-        // Для булевых полей разрешаем только оператор equals
         if (IsBooleanType(colType) && op?.ToLower() != "equals")
         {
-            return null; // не поддерживаем другие операторы для bool
+            return null;
         }
 
-        // Определяем SQL-оператор на основе входного оператора
         string sqlOperator = op?.ToLower() switch
         {
             "equals" => "=",
@@ -158,7 +154,6 @@ public class TableDataService
             _ => null
         };
 
-        // Обработка текстовых операторов (ILIKE)
         if (op?.ToLower() == "contains" || op?.ToLower() == "startswith")
         {
             if (!IsTextType(colType)) return null;
@@ -166,10 +161,8 @@ public class TableDataService
             return $"\"{column.ColumnName}\" ILIKE {paramName}";
         }
 
-        // Если оператор не распознан
         if (sqlOperator == null) return null;
 
-        // Преобразуем значение в соответствии с типом колонки
         paramValue = ConvertValue(colType, rawValue);
         return $"\"{column.ColumnName}\" {sqlOperator} {paramName}";
     }
@@ -241,7 +234,6 @@ public class TableDataService
 
         try
         {
-            // Boolean
             if (lowerType.Contains("bool"))
             {
                 return value.ToLowerInvariant() switch
@@ -252,14 +244,12 @@ public class TableDataService
                 };
             }
 
-            // Целые числа
             if (lowerType.Contains("smallint")) return short.Parse(value, CultureInfo.InvariantCulture);
             if (lowerType.Contains("int") && !lowerType.Contains("bigint"))
                 return int.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
             if (lowerType.Contains("bigint"))
                 return long.Parse(value, NumberStyles.Integer, CultureInfo.InvariantCulture);
 
-            // Числа с плавающей точкой
             if (lowerType.Contains("decimal") || lowerType.Contains("numeric"))
                 return decimal.Parse(value, NumberStyles.Any, CultureInfo.InvariantCulture);
             if (lowerType.Contains("real") || lowerType.Contains("float4"))
@@ -267,10 +257,8 @@ public class TableDataService
             if (lowerType.Contains("double") || lowerType.Contains("float8"))
                 return double.Parse(value, NumberStyles.Any, CultureInfo.InvariantCulture);
 
-            // Дата и время
             if (lowerType.Contains("date") && !lowerType.Contains("timestamp"))
             {
-                // date
                 if (DateOnly.TryParse(value, out var dateOnly))
                     return dateOnly.ToDateTime(TimeOnly.MinValue);
                 return DateTime.Parse(value, CultureInfo.CurrentCulture).Date;
@@ -286,7 +274,6 @@ public class TableDataService
                 return TimeSpan.Parse(value, CultureInfo.CurrentCulture);
             }
 
-            // UUID
             if (lowerType.Contains("uuid"))
                 return Guid.Parse(value);
 
@@ -300,7 +287,6 @@ public class TableDataService
                 };
             }
 
-            // По умолчанию — строка
             return value;
         }
         catch (Exception ex)
@@ -308,6 +294,4 @@ public class TableDataService
             throw new InvalidOperationException($"Cannot convert '{value}' to type {type}", ex);
         }
     }
-
-
 }

@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="AdminPanel.WebApi/AdminPanel.WebApi.csproj" />
+  <Project Path="AdminPanel/AdminPanel.csproj" Id="7d904682-1fbc-47ec-a9ea-dfaf793d8edb" />
 </Solution>

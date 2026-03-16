@@ -1,10 +1,11 @@
-﻿using AdminPanel.WebApi.Models;
+﻿using AdminPanel.Models;
 using Dapper;
+using Microsoft.Extensions.Configuration;
 using Npgsql;
 
-namespace AdminPanel.WebApi.Services;
+namespace AdminPanel.Services;
 
-public class DatabaseSchemaService
+public class DatabaseSchemaService:IDatabaseSchemaService
 {
     private readonly string _connectionString;
 

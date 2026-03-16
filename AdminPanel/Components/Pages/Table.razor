@@ -1,23 +1,20 @@
 ﻿@page "/{Schema}/{TableName}"
 @using System.Globalization
-@inject DatabaseSchemaService SchemaService
-@inject TableDataService DataService
+@using System.Text.Json
 @inject IJSRuntime JSRuntime
+@inject IAdminPanelApi Api
 @rendermode InteractiveServer
 
 <h1>@_descriptionScheme.@_descriptionTable</h1>
 
-<!-- Панель поиска (отображается только если данные загружены) -->
 @if (_columns != null)
 {
-    <!-- Панель поиска -->
     <div class="card mb-3">
         <div class="card-header">
             <h5>🔍 Поиск</h5>
         </div>
         <div class="card-body">
             <div class="row">
-                <!-- Выбор поля -->
                 <div class="col-md-3">
                     <label>Поле</label>
                     <select value="@_newCondition.FieldName" @onchange="OnFieldChanged" class="form-control">
@@ -29,7 +26,6 @@
                     </select>
                 </div>
 
-                <!-- Выбор оператора (доступен только если выбрано поле) -->
                 <div class="col-md-3">
                     <label>Оператор</label>
                     <select @bind="_newCondition.Operator"
@@ -63,7 +59,6 @@
                     </select>
                 </div>
 
-                <!-- Ввод значения (доступен только если выбрано поле) -->
                 <div class="col-md-3">
                     <label>Значение</label>
                     @if (IsBooleanColumn(_newCondition.FieldName))
@@ -86,14 +81,12 @@
                     }
                 </div>
 
-                <!-- Кнопка добавления условия -->
                 <div class="col-md-3">
                     <label>&nbsp;</label>
                     <button class="btn btn-primary form-control" @onclick="AddCondition">➕ Добавить</button>
                 </div>
             </div>
 
-            <!-- Список активных фильтров (без изменений) -->
             @if (_searchConditions.Any())
             {
                 <div class="mt-3">
@@ -111,14 +104,12 @@
                 </div>
             }
 
-            <!-- Кнопка применения поиска -->
             <button class="btn btn-success mt-3" @onclick="ApplySearch">🔎 Применить поиск</button>
         </div>
     </div>
   
 }
 
-<!-- Кнопка добавления записи (доступна только когда колонки загружены) -->
 @if (_columns != null)
 {
     <button class="btn btn-primary mb-3" @onclick="ShowAddModal">➕ Добавить запись</button>
@@ -147,7 +138,6 @@ else
                 <tr @key="row[_primaryKeys.FirstOrDefault()]">
                     @foreach (var col in _columns)
                     {
-                        @* <td>@row[col.ColumnName]</td> *@
                         <td>@FormatValueForDisplay(row[col.ColumnName], col.DataType)</td>
                     }
                     <td>
@@ -315,37 +305,90 @@ else
         await LoadMetadataAsync();
         await LoadTotalCountAsync();
         await LoadDataAsync();
-        _newCondition = new SearchCondition(); // гарантируем чистоту
+        _newCondition = new SearchCondition();
     }
 
     private async Task LoadMetadataAsync()
     {
-        _descriptionScheme = await SchemaService.GetSchemaDescriptionAsync(Schema) ?? Schema;
-        _descriptionTable = await SchemaService.GetTableDescriptionAsync(Schema, TableName) ?? TableName;
-        _columns = (await SchemaService.GetColumnsAsync(Schema, TableName)) ?? new List<ColumnInfo>();
-        _primaryKeys = (await SchemaService.GetPrimaryKeyColumnsAsync(Schema, TableName)) ?? new List<string>();
+        _descriptionScheme = await Api.GetSchemaDescriptionAsync(Schema) ?? Schema;
+        _descriptionTable = await Api.GetTableDescriptionAsync(Schema, TableName) ?? TableName;
+        _columns = await Api.GetColumnsAsync(Schema, TableName) ?? new List<ColumnInfo>();
+        _primaryKeys = await Api.GetPrimaryKeysAsync(Schema, TableName) ?? new List<string>();
     }
 
     private async Task LoadDataAsync()
     {
         var orderByColumn = _primaryKeys.FirstOrDefault() ?? "id";
-        _data = await DataService.GetDataAsync(
-            Schema,
-            TableName,
-            orderByColumn,
-            _searchConditions,
-            _columns,
-            _currentPage,
-            PageSize);
+        var request = new DataRequest
+        {
+            Page = _currentPage,
+            PageSize = PageSize,
+            OrderByColumn = orderByColumn,
+            Filters = _searchConditions
+        };
+        var rawData = await Api.GetDataAsync(Schema, TableName, request);
+        _data = ConvertData(rawData);
+    }
+
+    private List<Dictionary<string, object>> ConvertData(List<Dictionary<string, object>> rawData)
+    {
+        if (_columns == null) return rawData;
+
+        foreach (var row in rawData)
+        {
+            foreach (var col in _columns)
+            {
+                if (row.TryGetValue(col.ColumnName, out var val) && val is JsonElement element)
+                {
+                    row[col.ColumnName] = ConvertJsonElement(element, col.DataType);
+                }
+            }
+        }
+        return rawData;
+    }
+
+    private object ConvertJsonElement(JsonElement element, string dataType)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.String:
+                var lowerType = dataType.ToLowerInvariant();
+                if (lowerType.Contains("date") || lowerType.Contains("timestamp"))
+                    return element.GetDateTime();
+                if (lowerType.Contains("guid") || lowerType.Contains("uuid"))
+                    return element.GetGuid();
+                return element.GetString();
+
+            case JsonValueKind.Number:
+                if (dataType.Contains("int") || dataType.Contains("integer"))
+                    return element.GetInt32();
+                if (dataType.Contains("bigint"))
+                    return element.GetInt64();
+                if (dataType.Contains("decimal") || dataType.Contains("numeric"))
+                    return element.GetDecimal();
+                if (dataType.Contains("float") || dataType.Contains("double"))
+                    return element.GetDouble();
+                return element.GetRawText();
+
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+                return element.GetBoolean();
+
+            case JsonValueKind.Null:
+                return null;
+
+            default:
+                return element.GetRawText();
+        }
     }
 
     private async Task LoadTotalCountAsync()
     {
-        _totalCount = await DataService.GetCountAsync(
+        _totalCount = await Api.GetCountAsync(
             Schema,
             TableName,
-            _searchConditions,
-            _columns);
+            _searchConditions
+            );
     }
 
     private async Task NextPage()
@@ -366,7 +409,6 @@ else
     private void OnFieldChanged(ChangeEventArgs e)
     {
         _newCondition.FieldName = e.Value?.ToString();
-        // Устанавливаем оператор по умолчанию в зависимости от типа поля
         _newCondition.Operator = GetDefaultOperatorForField(_newCondition.FieldName);
         _newCondition.Value = null;
         _newCondition.Operator = null;
@@ -537,7 +579,6 @@ else
         switch (dataType.ToLowerInvariant())
         {
             case "date":
-                // Для input type="date" нужен формат YYYY-MM-DD
                 if (value is DateTime dateTime)
                     return dateTime.ToString("yyyy-MM-dd");
                 if (value is DateOnly dateOnly)
@@ -548,14 +589,12 @@ else
             case "timestamp without time zone":
             case "timestamptz":
             case "timestamp with time zone":
-                // Для input type="datetime-local" нужен формат YYYY-MM-DDTHH:mm:ss
                 if (value is DateTime timestamp)
                     return timestamp.ToString("yyyy-MM-ddTHH:mm:ss");
                 break;
 
             case "time":
             case "time without time zone":
-                // Для input type="time" нужен формат HH:mm:ss
                 if (value is TimeSpan timeSpan)
                     return timeSpan.ToString(@"hh\:mm\:ss");
                 if (value is DateTime time)
@@ -570,7 +609,6 @@ else
             case "float4":
             case "double precision":
             case "float8":
-                // Для чисел используем инвариантную культуру (с точкой)
                 if (value is decimal decimalValue)
                     return decimalValue.ToString(CultureInfo.InvariantCulture);
                 if (value is float floatValue)
@@ -595,7 +633,7 @@ else
         {
             keyValues[pk] = row[pk];
         }
-        await DataService.DeleteAsync(Schema, TableName, keyValues);
+        await Api.DeleteAsync(Schema, TableName, keyValues);
         await LoadDataAsync();
     }
 
@@ -622,7 +660,6 @@ else
             return;
         }
 
-        // Преобразование и сохранение
         try
         {
             var convertedValues = new Dictionary<string, object>();
@@ -634,11 +671,17 @@ else
 
             if (_isEdit)
             {
-                await DataService.UpdateAsync(Schema, TableName, convertedValues, _primaryKeys, _originalKeyValues);
+                var request = new UpdateRequest
+                {
+                    Values = convertedValues,
+                    KeyColumns = _primaryKeys,
+                    KeyValues = _originalKeyValues
+                };
+                await Api.UpdateAsync(Schema, TableName, request);
             }
             else
             {
-                await DataService.InsertAsync(Schema, TableName, convertedValues);
+                await Api.InsertAsync(Schema, TableName, convertedValues);
             }
 
             _showModal = false;
@@ -670,71 +713,29 @@ else
         _editValues[columnName] = value;
     }
 
-    // private object ConvertToDbType(string value, ColumnInfo column)
-    // {
-    //     if (string.IsNullOrWhiteSpace(value))
-    //         return null;
-
-    //     string typeName = column.DataType.ToLowerInvariant();
-
-    //     try
-    //     {
-    //         return typeName switch
-    //         {
-    //             "integer" or "int" or "int4" => int.Parse(value),
-    //             "bigint" or "int8" => long.Parse(value),
-    //             "smallint" or "int2" => short.Parse(value),
-    //             "boolean" or "bool" => bool.Parse(value),
-    //             "numeric" or "decimal" => decimal.Parse(value),
-    //             "real" or "float4" => float.Parse(value),
-    //             "double precision" or "float8" => double.Parse(value),
-    //             "date" => DateOnly.Parse(value),
-    //             "timestamp" or "timestamp without time zone" => DateTime.Parse(value),
-    //             "timestamptz" or "timestamp with time zone" => DateTime.Parse(value),
-    //             "time" => TimeOnly.Parse(value),
-    //             "uuid" => Guid.Parse(value),
-    //             "json" or "jsonb" => value, 
-    //             _ => value
-    //         };
-    //     }
-    //     catch (FormatException ex)
-    //     {
-    //         throw new InvalidOperationException($"Неверный формат для колонки {column.ColumnName} (тип {column.DataType})", ex);
-    //     }
-    // }
-
-    // Определение типа input по типу данных PostgreSQL
     private string GetInputType(string dataType)
     {
         return dataType.ToLowerInvariant() switch
         {
-            // Числовые типы
             "integer" or "int" or "int4" or "smallint" or "int2" or "bigint" or "int8" => "number",
             "numeric" or "decimal" or "real" or "float4" or "double precision" or "float8" => "number",
             
-            // Типы дат и времени
             "date" => "date",
             "time" or "time without time zone" or "timetz" => "time",
             "timestamp" or "timestamp without time zone" or "timestamptz" or "timestamp with time zone" => "datetime-local",
             
-            // Логический тип
             "boolean" or "bool" => "checkbox",
             
-            // JSON типы - оставляем текстовое поле
             "json" or "jsonb" => "textarea",
             
-            // Текстовые типы
             "text" or "character varying" or "varchar" or "char" or "character" => "text",
             
-            // UUID
             "uuid" => "text",
 
-            // По умолчанию
             _ => "text"
         };
     }
 
-    // Шаг для числовых полей
     private string GetInputStep(string dataType)
     {
         return dataType.ToLowerInvariant() switch
@@ -747,7 +748,6 @@ else
 
     private string ValidateField(ColumnInfo col, string value)
     {
-        // Проверка обязательности
         if (!col.IsNullable && string.IsNullOrWhiteSpace(value))
             return "Поле обязательно для заполнения";
 
@@ -763,7 +763,7 @@ else
                 case "int4":
                 case "smallint":
                 case "int2":
-                    ParseInt(value); // Просто проверяем, что парсится
+                    ParseInt(value); 
                     break;
 
                 case "bigint":
@@ -870,16 +870,13 @@ else
         if (string.IsNullOrWhiteSpace(value))
             throw new ArgumentNullException(nameof(value));
 
-        // Убираем пробелы и заменяем запятую на точку для единообразия
         value = value.Trim().Replace(',', '.');
 
         try
         {
-            // Для целых чисел
             if (typeof(T) == typeof(int) || typeof(T) == typeof(long) ||
                 typeof(T) == typeof(short) || typeof(T) == typeof(byte))
             {
-                // Сначала пробуем парсить как есть
                 if (typeof(T) == typeof(int) && int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intResult))
                     return (T)(object)intResult;
                 if (typeof(T) == typeof(long) && long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longResult))
@@ -887,7 +884,6 @@ else
                 if (typeof(T) == typeof(short) && short.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var shortResult))
                     return (T)(object)shortResult;
 
-                // Если не получилось, возможно есть десятичная часть - пробуем отбросить
                 if (value.Contains('.'))
                 {
                     var intPart = value.Split('.')[0];
@@ -895,7 +891,6 @@ else
                         return (T)(object)intResult2;
                 }
             }
-            // Для чисел с плавающей точкой
             else if (typeof(T) == typeof(decimal) || typeof(T) == typeof(float) || typeof(T) == typeof(double))
             {
                 if (typeof(T) == typeof(decimal) && decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var decResult))
@@ -914,16 +909,13 @@ else
         throw new FormatException($"Не удалось преобразовать '{value}' в {typeof(T).Name}");
     }
 
-    // Специализированные методы для каждого типа
     private int ParseInt(string value)
     {
         value = value.Trim().Replace(',', '.');
 
-        // Пробуем прямой парсинг
         if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result))
             return result;
 
-        // Если есть десятичная часть, пробуем отбросить
         if (value.Contains('.'))
         {
             var intPart = value.Split('.')[0];
@@ -955,11 +947,9 @@ else
     {
         value = value.Trim().Replace(',', '.');
 
-        // Пробуем прямой парсинг
         if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var result))
             return result;
 
-        // Пробуем заменить точку на запятую и наоборот
         if (value.Contains('.'))
         {
             if (decimal.TryParse(value.Replace('.', ','), NumberStyles.Any, CultureInfo.CurrentCulture, out result))
@@ -1003,15 +993,12 @@ else
 
         try
         {
-            // Пробуем распарсить как DateOnly с инвариантной культурой (ожидает YYYY-MM-DD)
             if (DateOnly.TryParse(value, out var dateResult))
                 return dateResult.ToDateTime(TimeOnly.MinValue);
 
-            // Пробуем распарсить как DateTime и взять дату
             if (DateTime.TryParse(value, CultureInfo.CurrentCulture, out var dateTimeResult))
                 return dateTimeResult.Date;
 
-            // Пробуем различные форматы вручную
             var formats = new[]
             {
             "yyyy-MM-dd",
@@ -1027,7 +1014,6 @@ else
             if (DateOnly.TryParseExact(value, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out dateResult))
                 return dateResult.ToDateTime(TimeOnly.MinValue);
 
-            // Последняя попытка - заменить разделители
             var normalized = value.Replace('/', '-').Replace('.', '-');
             if (DateOnly.TryParseExact(normalized, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dateResult))
                 return dateResult.ToDateTime(TimeOnly.MinValue);
@@ -1047,13 +1033,11 @@ else
 
         value = value.Trim();
 
-        // Пробуем распарсить как TimeOnly
         if (TimeOnly.TryParse(value, out var timeOnly))
         {
             return timeOnly.ToTimeSpan();
         }
 
-        // Пробуем распарсить как TimeSpan
         if (TimeSpan.TryParse(value, out var timeSpan))
         {
             return timeSpan;
@@ -1069,13 +1053,11 @@ else
 
         value = value.Trim();
 
-        // Пробуем распарсить как DateTime
         if (DateTime.TryParse(value, out var dateTime))
         {
             return dateTime;
         }
 
-        // Пробуем разные форматы
         var formats = new[]
         {
         "yyyy-MM-dd HH:mm:ss",

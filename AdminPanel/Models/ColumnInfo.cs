@@ -1,4 +1,4 @@
-﻿namespace AdminPanel.WebApi.Models;
+﻿namespace AdminPanel.Models;
 
 public class ColumnInfo
 {

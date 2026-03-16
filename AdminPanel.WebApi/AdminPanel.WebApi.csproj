@@ -12,4 +12,8 @@
     <PackageReference Include="Npgsql" Version="10.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\AdminPanel\AdminPanel.csproj" />
+  </ItemGroup>
+
 </Project>
