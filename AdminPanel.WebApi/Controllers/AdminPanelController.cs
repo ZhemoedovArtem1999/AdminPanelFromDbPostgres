@@ -1,5 +1,6 @@
-﻿using AdminPanel.Models;
-using AdminPanel.Services;
+﻿using AdminPanel.Domain.Interfaces;
+using AdminPanel.Domain.Models;
+using AdminPanel.Domain.Models.Request;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 

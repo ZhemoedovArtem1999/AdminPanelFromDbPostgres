@@ -1,6 +1,7 @@
-﻿using AdminPanel.Models;
+﻿
+using AdminPanel.Domain.Models;
 
-namespace AdminPanel.Services;
+namespace AdminPanel.Domain.Interfaces;
 
 public interface IDatabaseSchemaService
 {

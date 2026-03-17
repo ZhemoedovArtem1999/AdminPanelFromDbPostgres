@@ -13,6 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AdminPanel.Domain\AdminPanel.Domain.csproj" />
     <ProjectReference Include="..\AdminPanel\AdminPanel.csproj" />
   </ItemGroup>
 

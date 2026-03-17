@@ -1,4 +1,5 @@
-﻿using AdminPanel.Interfaces;
+﻿using AdminPanel.Domain.Interfaces;
+using AdminPanel.Interfaces;
 using AdminPanel.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

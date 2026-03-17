@@ -1,4 +1,5 @@
-﻿using AdminPanel.Models;
+﻿using AdminPanel.Domain.Interfaces;
+using AdminPanel.Domain.Models;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
@@ -216,11 +217,6 @@ public class TableDataService : ITableDataService
     private bool IsTextType(string type) =>
       new[] { "string", "text", "varchar", "char" }.Contains(type?.ToLower());
 
-    private bool IsNumericType(string type) =>
-        new[] { "int", "long", "decimal", "double", "float", "short", "byte" }.Contains(type?.ToLower());
-
-    private bool IsDateType(string type) =>
-        new[] { "datetime", "date", "time", "timestamp", "timestamp with time zone" }.Contains(type?.ToLower());
     private bool IsBooleanType(string type)
     {
         if (string.IsNullOrEmpty(type)) return false;

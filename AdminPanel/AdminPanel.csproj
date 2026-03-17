@@ -25,6 +25,10 @@
     <PackageReference Include="Refit.HttpClientFactory" Version="10.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\AdminPanel.Domain\AdminPanel.Domain.csproj" />
+  </ItemGroup>
+
 
 
 </Project>

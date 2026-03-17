@@ -1,4 +1,5 @@
-﻿using AdminPanel.Models;
+﻿using AdminPanel.Domain.Models;
+using AdminPanel.Domain.Models.Request;
 using Refit;
 
 namespace AdminPanel.Interfaces;
