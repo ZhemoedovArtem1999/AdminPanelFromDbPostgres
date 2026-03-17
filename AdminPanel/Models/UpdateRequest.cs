@@ -1,4 +1,4 @@
-﻿namespace AdminPanel.Domain.Models.Request;
+﻿namespace AdminPanel.Models;
 
 public class UpdateRequest
 {

@@ -1,5 +1,7 @@
 <Solution>
+  <Project Path="AdminPanel.Auth/AdminPanel.Auth.csproj" Id="7808b0d4-9415-4ae9-bf98-0447c59e3967" />
   <Project Path="AdminPanel.Domain/AdminPanel.Domain.csproj" Id="60dcd473-451b-4505-8bc6-256fb3e837d0" />
   <Project Path="AdminPanel.WebApi/AdminPanel.WebApi.csproj" />
   <Project Path="AdminPanel/AdminPanel.csproj" Id="7d904682-1fbc-47ec-a9ea-dfaf793d8edb" />
+  <Project Path="Persistence/Persistence.csproj" Id="10badf3a-ce5f-457f-9562-e9d7114ad7a9" />
 </Solution>

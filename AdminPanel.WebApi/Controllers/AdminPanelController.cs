@@ -1,11 +1,12 @@
 ﻿using AdminPanel.Domain.Interfaces;
 using AdminPanel.Domain.Models;
-using AdminPanel.Domain.Models.Request;
+using AdminPanel.Models;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
 namespace AdminPanel.WebApi.Controllers;
 
+[ApiController]
 [Route("api/admin")]
 public class AdminPanelController : ControllerBase
 {

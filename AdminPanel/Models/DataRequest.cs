@@ -1,4 +1,6 @@
-﻿namespace AdminPanel.Domain.Models.Request;
+﻿using AdminPanel.Domain.Models;
+
+namespace AdminPanel.Models;
 
 public class DataRequest
 {

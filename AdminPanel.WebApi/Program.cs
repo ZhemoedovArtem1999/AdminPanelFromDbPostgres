@@ -1,4 +1,6 @@
+using AdminPanel.Auth;
 using Npgsql;
+using Persistence;
 
 namespace AdminPanel.WebApi;
 
@@ -19,10 +21,12 @@ public class Program
         builder.Services.AddServerSideBlazor();
 
         builder.Services.AddHttpClient();
+        builder.Services.ConfigureAdminPanelServices(builder.Configuration);
+        builder.Services.ConfigurePersistenceServices(builder.Configuration);
+        builder.Services.ConfigureAuthServices(builder.Configuration);
 
         builder.Services.AddControllers();
 
-        builder.Services.ConfigureAdminPanelServices(builder.Configuration);
 
         var app = builder.Build();
 
@@ -38,7 +42,8 @@ public class Program
 
         app.UseAntiforgery();
 
-        // авторизаци€ / аутентификаци€ если нужна будет
+        app.UseAuthentication();
+        app.UseAuthorization();
 
         app.MapControllers();
 
