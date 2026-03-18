@@ -1,13 +1,28 @@
 ﻿@using System.Reflection
+@using Microsoft.AspNetCore.Components.Authorization
 
 <Router AppAssembly="@(Assembly.GetExecutingAssembly())">
     <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+            <NotAuthorized>
+                @if (context.User.Identity?.IsAuthenticated == true)
+                {
+                    <p>У вас нет прав для доступа к этому ресурсу.</p>
+                }
+                else
+                {
+                    <RedirectToLogin />
+                }
+            </NotAuthorized>
+            <Authorizing>
+                <p>Проверка авторизации...</p>
+            </Authorizing>
+        </AuthorizeRouteView>
         <FocusOnNavigate RouteData="@routeData" Selector="h1" />
     </Found>
     <NotFound>
         <LayoutView Layout="@typeof(MainLayout)">
-            <p>Sorry, there's nothing at this address.</p>
+            <p>Извините, такой страницы нет.</p>
         </LayoutView>
     </NotFound>
 </Router>

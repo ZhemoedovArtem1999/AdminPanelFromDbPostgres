@@ -1,4 +1,7 @@
-﻿@inject IAdminPanelApi Api
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@inject IAdminPanelApi Api
+@inject AuthenticationStateProvider AuthProvider
+
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -11,18 +14,22 @@
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
 
-        @if (_schemas != null)
-        {
-            foreach (var schema in _schemas)
-            {
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="@($"/{schema.SchemaName}")">
-                        <i class="bi bi-robot" aria-hidden="true"></i>
-                        @schema.DisplayName
-                    </NavLink>
-                </div>
-            }
-        }
+        <AuthorizeView>
+            <Authorized>
+                @if (_schemas != null)
+                {
+                    foreach (var schema in _schemas)
+                    {
+                        <div class="nav-item px-3">
+                            <NavLink class="nav-link" href="@($"/{schema.SchemaName}")">
+                                <i class="bi bi-robot" aria-hidden="true"></i>
+                                @schema.DisplayName
+                            </NavLink>
+                        </div>
+                    }
+                }
+            </Authorized>
+        </AuthorizeView>
     </nav>
 </div>
 
@@ -31,7 +38,11 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _schemas = await Api.GetSchemasAsync();
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            _schemas = await Api.GetSchemasAsync();
+        }
     }
 }
 

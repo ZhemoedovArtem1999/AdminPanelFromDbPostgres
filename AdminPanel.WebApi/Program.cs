@@ -10,8 +10,8 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-        NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
-        AppContext.SetSwitch("Npgsql.EnableSqlLogging", true);
+        //NpgsqlConnection.GlobalTypeMapper.EnableDynamicJson();
+        //AppContext.SetSwitch("Npgsql.EnableSqlLogging", true);
 
         builder.Services.AddControllers();
         builder.Services.AddOpenApi();

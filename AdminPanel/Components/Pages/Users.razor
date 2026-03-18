@@ -1,0 +1,124 @@
+﻿@page "/users"
+@using AdminPanel.Domain.Enums
+@using AdminPanel.Domain.Models.Auth
+@using AdminPanel.Domain.Models.Auth.Requests
+@using Microsoft.AspNetCore.Authorization
+@inject IUsersApi Api
+@inject IJSRuntime JSRuntime
+@attribute [Authorize(Policy = "ManageUsers")]
+
+<h2>Пользователи</h2>
+
+@if (_users == null)
+{
+    <p>Загрузка...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>ФИО</th>
+                <th>Логин</th>
+                <th>Права</th>
+                <th>Пароль установлен?</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in _users)
+            {
+                <tr>
+                    <td>@user.Id</td>
+                    <td>@user.FullName</td>
+                    <td>@user.Login</td>
+                    <td>@user.Permissions</td>
+                    <td>@(user.PasswordSet ? "Да" : "Нет")</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" @onclick="() => EditPermissions(user)">Изменить права</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (_showEditModal)
+{
+    <div class="modal" style="display:block; background-color:rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5>Редактирование прав</h5>
+                    <button class="close" @onclick="CloseModal">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Пользователь: @_editingUser?.FullName</label>
+                    </div>
+                    <div class="form-group">
+                        <label>Права</label>
+                        <InputSelect @bind-Value="_editPermissions" class="form-control">
+                            <option value="@Permission.View">Только просмотр</option>
+                            <option value="@(Permission.View | Permission.Edit)">Просмотр и редактирование</option>
+                            <option value="@(Permission.View | Permission.Edit | Permission.Delete)">Полный доступ</option>
+                            <option value="@(Permission.View | Permission.ManageUsers)">Просмотр + управление пользователями</option>
+                        </InputSelect>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CloseModal">Отмена</button>
+                    <button class="btn btn-primary" @onclick="SavePermissions">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<UserDto> _users;
+    private bool _showEditModal;
+    private UserDto _editingUser;
+    private Permission _editPermissions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            _users = await Api.GetUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Ошибка загрузки: " + ex.Message);
+        }
+    }
+
+    private void EditPermissions(UserDto user)
+    {
+        _editingUser = user;
+        _editPermissions = user.Permissions;
+        _showEditModal = true;
+    }
+
+    private async Task SavePermissions()
+    {
+        try
+        {
+            await Api.UpdateUserPermissionsAsync(_editingUser.Id, new UpdatePermissionsRequest { Permissions = _editPermissions });
+            _showEditModal = false;
+            await LoadUsers();
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Ошибка: " + ex.Message);
+        }
+    }
+
+    private void CloseModal() => _showEditModal = false;
+}

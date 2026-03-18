@@ -1,0 +1,52 @@
+﻿@page "/login"
+@using AdminPanel.Auth
+@using AdminPanel.Domain.Models.Auth.Requests
+@using Refit
+@inject IAuthApi Api
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject JwtAuthenticationStateProvider AuthStateProvider
+
+<h2>Вход в систему</h2>
+
+<EditForm Model="@_loginModel" OnValidSubmit="@HandleLogin">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label>Логин</label>
+        <InputText @bind-Value="_loginModel.Login" class="form-control" />
+    </div>
+    <div class="form-group">
+        <label>Пароль</label>
+        <InputText type="password" @bind-Value="_loginModel.Password" class="form-control" />
+    </div>
+    <button type="submit" class="btn btn-primary">Войти</button>
+</EditForm>
+
+@code {
+    private LoginRequest _loginModel = new();
+
+    private async Task HandleLogin()
+    {
+        try
+        {
+            var response = await Api.LoginAsync(_loginModel);
+            if (response.RequiresPasswordSetup)
+            {
+                Navigation.NavigateTo($"/set-password?login={_loginModel.Login}");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("localStorage.setItem", "accessToken", response.AccessToken);
+                await JSRuntime.InvokeVoidAsync("localStorage.setItem", "refreshToken", response.RefreshToken);
+                AuthStateProvider.NotifyUserAuthentication(response.AccessToken);
+                Navigation.NavigateTo("/", true);
+            }
+        }
+        catch (ApiException ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Ошибка входа: " + ex.Message);
+        }
+    }
+}

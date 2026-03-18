@@ -1,0 +1,53 @@
+﻿@page "/register"
+@using AdminPanel.Domain.Enums
+@using AdminPanel.Domain.Models.Auth.Requests
+@using Microsoft.AspNetCore.Authorization
+@using Refit
+@inject IAuthApi Api
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = "ManageUsers")]
+
+<h2>Регистрация нового пользователя</h2>
+
+<EditForm Model="@_registerModel" OnValidSubmit="@HandleRegister">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label>ФИО</label>
+        <InputText @bind-Value="_registerModel.FullName" class="form-control" />
+    </div>
+    <div class="form-group">
+        <label>Логин</label>
+        <InputText @bind-Value="_registerModel.Login" class="form-control" />
+    </div>
+    <div class="form-group">
+        <label>Права</label>
+        <InputSelect @bind-Value="_registerModel.Permissions" class="form-control">
+            <option value="@Permission.View">Только просмотр</option>
+            <option value="@(Permission.View | Permission.Edit)">Просмотр и редактирование</option>
+            <option value="@(Permission.View | Permission.Edit | Permission.Delete)">Полный доступ</option>
+            <option value="@(Permission.View | Permission.ManageUsers)">Просмотр + управление пользователями</option>
+        </InputSelect>
+    </div>
+    <button type="submit" class="btn btn-primary">Зарегистрировать</button>
+</EditForm>
+
+@code {
+    private RegisterRequest _registerModel = new() { Permissions = Permission.View };
+
+    private async Task HandleRegister()
+    {
+        try
+        {
+            await Api.RegisterAsync(_registerModel);
+            await JSRuntime.InvokeVoidAsync("alert", "Пользователь зарегистрирован. Уведомите его о необходимости войти и установить пароль.");
+            Navigation.NavigateTo("/users");
+        }
+        catch (ApiException ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Ошибка: " + ex.Message);
+        }
+    }
+}

@@ -1,4 +1,12 @@
-﻿@inherits LayoutComponentBase
+﻿@using AdminPanel.Auth
+@using AdminPanel.Domain.Models.Auth.Requests
+@using Microsoft.AspNetCore.Components.Authorization
+@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+@inject IAuthApi Api
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthProvider
+
 
 <div class="page">
     <div class="sidebar" style="min-width:300px">
@@ -7,7 +15,35 @@
 
     <main>
         <article class="content px-4">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="d-flex justify-content-end mb-2">
+                        <span class="me-3">@context.User.Identity.Name (@context.User.FindFirst("fullname")?.Value)</span>
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="Logout">Выйти</button>                    </div>
+                </Authorized>
+            </AuthorizeView>
             @Body
         </article>
     </main>
-</div>
+</div
+
+@code {
+    private async Task Logout()
+    {
+        var refreshToken = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "refreshToken");
+        if (!string.IsNullOrEmpty(refreshToken))
+        {
+            try
+            {
+                await Api.LogoutAsync(new RefreshTokenRequest { RefreshToken = refreshToken });
+            }
+            catch { }
+        }
+        await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "accessToken");
+        await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "refreshToken");
+        // Приводим AuthenticationStateProvider к нашему кастомному, если нужно обновить состояние
+        if (AuthProvider is JwtAuthenticationStateProvider jwtProvider)
+            jwtProvider.NotifyUserLogout();
+        Navigation.NavigateTo("/login", true);
+    }
+}
