@@ -51,7 +51,7 @@ public class AuthService
     {
         var user = await _userRepository.FirstOrDefaultAsync(request.Login);
         if (user is null)
-            throw new UnauthorizedAccessException("Invalid credentials");
+            throw new UnauthorizedAccessException("Неверный логин или пароль");
 
         if (!user.PasswordSet)
         {
@@ -64,7 +64,7 @@ public class AuthService
         }
 
         if (!_passwordHasherService.VerifyPassword(request.Password, user.PasswordHash, user.Salt))
-            throw new UnauthorizedAccessException("Invalid credentials");
+            throw new UnauthorizedAccessException("Неверный логин или пароль");
 
         var accessToken = _tokenService.GenerateAccessToken(user);
         var refreshToken = await GenerateAndSaveRefreshToken(user.Id);

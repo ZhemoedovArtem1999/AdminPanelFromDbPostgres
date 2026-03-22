@@ -1,4 +1,5 @@
 ﻿@page "/login"
+@layout LoginLayout
 @using AdminPanel.Auth
 @using AdminPanel.Domain.Models.Auth.Requests
 @using Refit
@@ -40,13 +41,13 @@
             {
                 await JSRuntime.InvokeVoidAsync("localStorage.setItem", "accessToken", response.AccessToken);
                 await JSRuntime.InvokeVoidAsync("localStorage.setItem", "refreshToken", response.RefreshToken);
-                AuthStateProvider.NotifyUserAuthentication(response.AccessToken);
+                // AuthStateProvider.NotifyUserAuthentication(response.AccessToken, response.RefreshToken);
                 Navigation.NavigateTo("/", true);
             }
         }
         catch (ApiException ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", "Ошибка входа: " + ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", "Ошибка входа: " + ex.Content);
         }
     }
 }

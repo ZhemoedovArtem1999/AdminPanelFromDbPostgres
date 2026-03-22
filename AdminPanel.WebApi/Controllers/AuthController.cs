@@ -40,9 +40,9 @@ public class AuthController : ControllerBase
             var response = await _authService.Login(request);
             return Ok(response);
         }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized("Invalid credentials");
+            return Unauthorized(ex.Message);
         }
     }
 

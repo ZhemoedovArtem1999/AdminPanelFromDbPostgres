@@ -1,4 +1,5 @@
 ﻿@using System.Reflection
+@using AdminPanel.Components.Pages.Auth
 @using Microsoft.AspNetCore.Components.Authorization
 
 <Router AppAssembly="@(Assembly.GetExecutingAssembly())">
@@ -11,7 +12,7 @@
                 }
                 else
                 {
-                    <RedirectToLogin />
+                    <Login />
                 }
             </NotAuthorized>
             <Authorizing>
@@ -26,3 +27,4 @@
         </LayoutView>
     </NotFound>
 </Router>
+

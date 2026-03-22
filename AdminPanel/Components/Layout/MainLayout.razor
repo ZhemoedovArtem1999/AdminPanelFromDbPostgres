@@ -5,20 +5,24 @@
 @inject IJSRuntime JSRuntime
 @inject IAuthApi Api
 @inject NavigationManager Navigation
-@inject AuthenticationStateProvider AuthProvider
+@inject JwtAuthenticationStateProvider AuthProvider
 
 
 <div class="page">
-    <div class="sidebar" style="min-width:300px">
-        <NavMenu />
-    </div>
+    <AuthorizeView>
+        <Authorized>
+            <div class="sidebar" style="min-width:300px">
+                <NavMenu />
+            </div>
+        </Authorized>
+    </AuthorizeView>
 
     <main>
         <article class="content px-4">
             <AuthorizeView>
                 <Authorized>
                     <div class="d-flex justify-content-end mb-2">
-                        <span class="me-3">@context.User.Identity.Name (@context.User.FindFirst("fullname")?.Value)</span>
+                        <span class="me-3">Пользователь @context.User.Identity.Name </span>
                         <button class="btn btn-outline-secondary btn-sm" @onclick="Logout">Выйти</button>                    </div>
                 </Authorized>
             </AuthorizeView>
@@ -41,9 +45,7 @@
         }
         await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "accessToken");
         await JSRuntime.InvokeVoidAsync("localStorage.removeItem", "refreshToken");
-        // Приводим AuthenticationStateProvider к нашему кастомному, если нужно обновить состояние
-        if (AuthProvider is JwtAuthenticationStateProvider jwtProvider)
-            jwtProvider.NotifyUserLogout();
+        AuthProvider.NotifyUserLogout();
         Navigation.NavigateTo("/login", true);
     }
 }

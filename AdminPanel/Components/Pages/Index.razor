@@ -1,38 +1,14 @@
 ﻿@page "/"
+@using AdminPanel.Components.Pages.Auth
 @using Microsoft.AspNetCore.Components.Authorization
-@inject IAdminPanelApi Api
-@inject AuthenticationStateProvider AuthProvider
-
-<h1>Добро пожаловать в административную панель</h1>
 
 <AuthorizeView>
     <Authorized>
-        <p>Вы вошли как @context.User.Identity.Name.</p>
-        @if (_schemas != null)
-        {
-            <h3>Схемы</h3>
-            <ul>
-                @foreach (var schema in _schemas)
-                {
-                    <li><a href="@($"/{schema.SchemaName}")">@schema.DisplayName</a></li>
-                }
-            </ul>
-        }
     </Authorized>
     <NotAuthorized>
-        <p>Для доступа необходимо <a href="/login">войти</a>.</p>
+        <Login />
     </NotAuthorized>
 </AuthorizeView>
 
 @code {
-    private List<SchemaInfo> _schemas;
-
-    protected override async Task OnInitializedAsync()
-    {
-        var authState = await AuthProvider.GetAuthenticationStateAsync();
-        if (authState.User.Identity?.IsAuthenticated == true)
-        {
-            _schemas = await Api.GetSchemasAsync();
-        }
-    }
 }

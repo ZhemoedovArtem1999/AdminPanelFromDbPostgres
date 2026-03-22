@@ -1,6 +1,7 @@
 ﻿using AdminPanel.Domain.Interfaces;
 using AdminPanel.Domain.Models;
 using AdminPanel.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Text.Json;
 
@@ -20,6 +21,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpGet("schemas")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetSchemas()
     {
         var schemas = await _schemaService.GetSchemasAsync();
@@ -27,6 +29,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpGet("schemaDescription/{schema}")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetSchemaDescription(string schema)
     {
         var description = await _schemaService.GetSchemaDescriptionAsync(schema);
@@ -34,6 +37,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpGet("schemas/{schema}/tables")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetTables(string schema)
     {
         var tables = await _schemaService.GetTablesAsync(schema);
@@ -41,6 +45,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpGet("tableDescription/{schema}/{table}")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetTableDescription(string schema, string table)
     {
         var description = await _schemaService.GetTableDescriptionAsync(schema, table);
@@ -48,6 +53,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpGet("schemas/{schema}/tables/{table}/columns")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetColumns(string schema, string table)
     {
         var columns = await _schemaService.GetColumnsAsync(schema, table);
@@ -55,6 +61,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpGet("schemas/{schema}/tables/{table}/primarykeys")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetPrimaryKeys(string schema, string table)
     {
         var keys = await _schemaService.GetPrimaryKeyColumnsAsync(schema, table);
@@ -62,6 +69,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpPost("schemas/{schema}/tables/{table}/data")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetData(
         string schema,
         string table,
@@ -80,6 +88,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpPost("schemas/{schema}/tables/{table}/count")]
+    [Authorize(Policy = "View")]
     public async Task<IActionResult> GetCount(
         string schema,
         string table,
@@ -91,6 +100,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpPost("schemas/{schema}/tables/{table}/insert")]
+    [Authorize(Policy = "Edit")]
     public async Task<IActionResult> Insert(
         string schema,
         string table,
@@ -123,6 +133,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpPut("schemas/{schema}/tables/{table}/update")]
+    [Authorize(Policy = "Edit")]
     public async Task<IActionResult> Update(
         string schema,
         string table,
@@ -182,6 +193,7 @@ public class AdminPanelController : ControllerBase
     }
 
     [HttpDelete("schemas/{schema}/tables/{table}/delete")]
+    [Authorize(Policy = "Delete")]
     public async Task<IActionResult> Delete(
         string schema,
         string table,
